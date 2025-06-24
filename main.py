@@ -226,13 +226,8 @@ def delete_event(update: Update, context):
     
     _, event_id = query.data.split('_')
     event = Event.get(id=event_id)
-    event.delete_instance()
-<<<<<<< HEAD
-    
+    event.delete_instance()    
     query.edit_message_text("Событие удалено!")
-
-=======
->>>>>>> f35da976959eb08251d22ed58a0437648df8b643
 
 def main():
     dp = initialize_db()
@@ -240,11 +235,7 @@ def main():
     application = Application.builder().token("YOUR_BOT_TOKEN").build()
 
     dp.add_handler(CallbackQueryHandler(delete_event, pattern='^delete_'))
-<<<<<<< HEAD
-    
-=======
 
->>>>>>> f35da976959eb08251d22ed58a0437648df8b643
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(add_event, pattern='^add_')],
         states={
