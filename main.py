@@ -151,14 +151,14 @@ async def back_to_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard
     )
 
-async def add_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def add_event(update: Update, context):
     query = update.callback_query
-    await query.answer()
+    query.answer()
     
     _, date_str = query.data.split('_')
     context.user_data['event_date'] = date_str
     
-    await query.edit_message_text("Введите название события:")
+    query.edit_message_text("Введите название события:")
     return ADDING_EVENT
 
 async def save_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -227,9 +227,12 @@ def delete_event(update: Update, context):
     _, event_id = query.data.split('_')
     event = Event.get(id=event_id)
     event.delete_instance()
+<<<<<<< HEAD
     
     query.edit_message_text("Событие удалено!")
 
+=======
+>>>>>>> f35da976959eb08251d22ed58a0437648df8b643
 
 def main():
     dp = initialize_db()
@@ -237,7 +240,11 @@ def main():
     application = Application.builder().token("YOUR_BOT_TOKEN").build()
 
     dp.add_handler(CallbackQueryHandler(delete_event, pattern='^delete_'))
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> f35da976959eb08251d22ed58a0437648df8b643
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(add_event, pattern='^add_')],
         states={
