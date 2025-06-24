@@ -1,10 +1,15 @@
 from datetime import datetime, timedelta
 from telegram import Bot
 import pytz
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 def setup_scheduler(job_queue, event, user_id):
     event_time = datetime.combine(event.date, event.time)
     reminder_time = event_time - timedelta(minutes=event.reminder_time)
+    
+    # Проверяем, не прошло ли уже время напоминания
+    if reminder_time < datetime.now():
+        return
     
     # Планируем напоминание
     job_queue.run_once(

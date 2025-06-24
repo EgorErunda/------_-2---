@@ -20,12 +20,13 @@ logger = logging.getLogger(__name__)
 # Состояния для ConversationHandler
 SELECTING_ACTION, ADDING_EVENT, SETTING_TIME, SETTING_REMINDER = range(4)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context):
     user_id = update.effective_user.id
     User.get_or_create(user_id=user_id)
     
-    week_info, keyboard = await get_week_keyboard()
-    await update.message.reply_text(
+    week_info, keyboard = get_week_keyboard()
+    
+    update.message.reply_text(
         f"📅 Добро пожаловать в ваш персональный планировщик!\n\n{week_info}",
         reply_markup=keyboard
     )
@@ -70,13 +71,13 @@ async def get_week_keyboard(current_date=None):
     
     return week_info, InlineKeyboardMarkup(keyboard)
 
-async def week_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def week_handler(update: Update, context):
     query = update.callback_query
-    await query.answer()
+    query.answer()
     
     if query.data == "current_week":
-        week_info, keyboard = await get_week_keyboard()
-        await query.edit_message_text(
+        week_info, keyboard = get_week_keyboard()
+        query.edit_message_text(
             f"📅 Текущая неделя:\n\n{week_info}",
             reply_markup=keyboard
         )
@@ -86,34 +87,34 @@ async def week_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     week_num, year = int(week_num), int(year)
     
     # Проверка на выход за границы года
-    total_weeks = datetime.strptime(f"{year}-12-28", "%Y-%m-%d").isocalendar()[1]
+    total_weeks = datetime.datetime.strptime(f"{year}-12-28", "%Y-%m-%d").isocalendar()[1]
     if week_num < 1:
         week_num = 1
     elif week_num > total_weeks:
         week_num = total_weeks
     
     # Вычисляем дату для выбранной недели
-    date = datetime.strptime(f"{year}-W{week_num}-1", "%Y-W%W-%w").date()
+    date = datetime.datetime.strptime(f"{year}-W{week_num}-1", "%Y-W%W-%w").date()
     
     week_info = f"Неделя {week_num} из {total_weeks}\n"
-    _, keyboard = await get_week_keyboard(date)
+    _, keyboard = get_week_keyboard(date)
     
-    await query.edit_message_text(
+    query.edit_message_text(
         f"📅 Выбранная неделя:\n\n{week_info}",
         reply_markup=keyboard
     )
 
-async def day_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def day_handler(update: Update, context):
     query = update.callback_query
-    await query.answer()
+    query.answer()
     
     _, date_str = query.data.split('_')
-    date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    date = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
     
     # Получаем номер недели для заголовка
     week_num = date.isocalendar()[1]
     year = date.year
-    total_weeks = datetime.strptime(f"{year}-12-28", "%Y-%m-%d").isocalendar()[1]
+    total_weeks = datetime.datetime.strptime(f"{year}-12-28", "%Y-%m-%d").isocalendar()[1]
     week_info = f"Неделя {week_num} из {total_weeks}\n"
     
     # Получаем события на этот день
@@ -136,20 +137,21 @@ async def day_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("Назад к неделе", callback_data="back_to_week")
     ]
     
-    await query.edit_message_text(
+    query.edit_message_text(
         text,
         reply_markup=InlineKeyboardMarkup([buttons])
     )
 
-async def back_to_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def back_to_week(update: Update, context):
     query = update.callback_query
-    await query.answer()
+    query.answer()
     
-    week_info, keyboard = await get_week_keyboard()
-    await query.edit_message_text(
+    week_info, keyboard = get_week_keyboard()
+    query.edit_message_text(
         f"📅 Текущая неделя:\n\n{week_info}",
         reply_markup=keyboard
     )
+    
 
 async def add_event(update: Update, context):
     query = update.callback_query
@@ -232,6 +234,8 @@ def delete_event(update: Update, context):
 def main():
     dp = initialize_db()
     
+    dp.add_handler(CallbackQueryHandler(back_to_week, pattern='^back_to_week$'))
+
     application = Application.builder().token("YOUR_BOT_TOKEN").build()
 
     dp.add_handler(CallbackQueryHandler(delete_event, pattern='^delete_'))
