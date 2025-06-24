@@ -220,10 +220,23 @@ async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
+def delete_event(update: Update, context):
+    query = update.callback_query
+    query.answer()
+    
+    _, event_id = query.data.split('_')
+    event = Event.get(id=event_id)
+    event.delete_instance()
+    
+    query.edit_message_text("Событие удалено!")
+
+
 def main():
-    initialize_db()
+    dp = initialize_db()
     
     application = Application.builder().token("YOUR_BOT_TOKEN").build()
+
+    dp.add_handler(CallbackQueryHandler(delete_event, pattern='^delete_'))
     
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(add_event, pattern='^add_')],
