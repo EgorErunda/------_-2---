@@ -161,16 +161,16 @@ async def add_event(update: Update, context):
     query.edit_message_text("Введите название события:")
     return ADDING_EVENT
 
-async def save_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def save_event(update: Update, context):
     event_name = update.message.text
     context.user_data['event_name'] = event_name
     
-    await update.message.reply_text("Введите время события в формате ЧЧ:ММ (например, 14:30):")
+    update.message.reply_text("Введите время события в формате ЧЧ:ММ (например, 14:30):")
     return SETTING_TIME
 
-async def set_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def set_time(update: Update, context):
     try:
-        event_time = datetime.strptime(update.message.text, "%H:%M").time()
+        event_time = datetime.datetime.strptime(update.message.text, "%H:%M").time()
         context.user_data['event_time'] = event_time
         
         # Предлагаем выбрать время напоминания
@@ -183,25 +183,25 @@ async def set_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("За 1 день", callback_data="reminder_1440")],
         ]
         
-        await update.message.reply_text(
+        update.message.reply_text(
             "Выберите, за сколько времени напомнить о событии:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return SETTING_REMINDER
     except ValueError:
-        await update.message.reply_text("Некорректный формат времени. Попробуйте еще раз:")
+        update.message.reply_text("Некорректный формат времени. Попробуйте еще раз:")
         return SETTING_TIME
 
-async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def set_reminder(update: Update, context):
     query = update.callback_query
-    await query.answer()
+    query.answer()
     
     _, minutes = query.data.split('_')
     minutes = int(minutes)
     
     # Сохраняем событие в базу
     user = User.get(user_id=update.effective_user.id)
-    event_date = datetime.strptime(context.user_data['event_date'], "%Y-%m-%d").date()
+    event_date = datetime.datetime.strptime(context.user_data['event_date'], "%Y-%m-%d").date()
     
     event = Event.create(
         user=user,
@@ -214,9 +214,9 @@ async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Запланировать напоминание
     setup_scheduler(context.job_queue, event, update.effective_user.id)
     
-    await query.edit_message_text(
+    query.edit_message_text(
         "Событие добавлено!",
-        reply_markup=await get_week_keyboard(event_date)[1]
+        reply_markup=get_week_keyboard(event_date)
     )
     return ConversationHandler.END
 
