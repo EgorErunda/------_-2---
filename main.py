@@ -13,9 +13,12 @@ from database import initialize_db, User, Event
 from keyboards import get_week_keyboard, get_reminder_keyboard
 from scheduler import setup_scheduler
 from datetime import datetime
-from config import TIMEZONE
+from config import TIMEZONE, BOT_TOKEN
 import pytz
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+tz = pytz.timezone(TIMEZONE)
+now = datetime.now(tz)
 
 # Настройка логирования
 logging.basicConfig(
@@ -175,8 +178,8 @@ def main():
     """Запуск бота"""
     initialize_db()
     
-    application.add_handler(CallbackQueryHandler(add_event, pattern='^add_'))
-    application.add_handler(CallbackQueryHandler(back_to_week, pattern='^back_to_week$'))
+    #application.add_handler(CallbackQueryHandler(add_event, pattern='^add_'))
+    #application.add_handler(CallbackQueryHandler(back_to_week, pattern='^back_to_week$'))
 
     application = Application.builder() \
         .token(BOT_TOKEN) \
