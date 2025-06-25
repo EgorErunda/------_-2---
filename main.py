@@ -2,8 +2,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
-    ConversationHandler, MessageHandler, filters,
-    ContextTypes
+    ConversationHandler, MessageHandler, filters
 )
 from database import initialize_db, User, Event
 from scheduler import setup_scheduler
@@ -233,14 +232,11 @@ def delete_event(update: Update, context):
     query.edit_message_text("Событие удалено!")
 
 def main():
-    dp = initialize_db()
+    initialize_db()
     
-    dp.add_handler(CallbackQueryHandler(back_to_week, pattern='^back_to_week$'))
-
-    application = Application.builder().token(BOT_TOKEN).build()
-
-    dp.add_handler(CallbackQueryHandler(delete_event, pattern='^delete_'))
-
+    # Создаем Application и передаем токен
+    application = Application.builder().token("YOUR_BOT_TOKEN").build()
+    
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(add_event, pattern='^add_')],
         states={
@@ -251,12 +247,14 @@ def main():
         fallbacks=[]
     )
     
+    # Добавляем все обработчики в application
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(week_handler, pattern='^week_'))
     application.add_handler(CallbackQueryHandler(day_handler, pattern='^day_'))
     application.add_handler(CallbackQueryHandler(back_to_week, pattern='^back_to_week$'))
     application.add_handler(conv_handler)
     
+    # Запускаем бота
     application.run_polling()
 
 if __name__ == '__main__':
