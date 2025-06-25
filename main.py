@@ -15,7 +15,8 @@ from scheduler import setup_scheduler
 from datetime import datetime
 from config import TIMEZONE, BOT_TOKEN
 import pytz
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+#from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from keyboards import get_day_keyboard
 
 tz = pytz.timezone(TIMEZONE)
 now = datetime.now(tz)
@@ -28,7 +29,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Состояния ConversationHandler
-SELECTING_ACTION, ADDING_EVENT, SETTING_TIME, SETTING_REMINDER = range(4)
+(
+    SELECTING_ACTION,
+    ADDING_EVENT,
+    SETTING_TITLE,
+    SETTING_TIME,
+    SETTING_REMINDER
+) = range(5)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка команды /start"""
@@ -46,7 +53,8 @@ async def show_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    if query.data == "current_week":
+    # Обработка кнопки "Назад к неделе"
+    if query.data == "back_to_week":
         week_info, keyboard = get_week_keyboard()
         await query.edit_message_text(
             f"📅 Текущая неделя:\n\n{week_info}",
@@ -54,8 +62,22 @@ async def show_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    _, week_num, year = query.data.split('_')
-    week_num, year = int(week_num), int(year)
+    # Обработка других callback_data
+    try:
+        if query.data.startswith('week_'):
+            _, week_num, year = query.data.split('_')
+            week_num, year = int(week_num), int(year)
+        elif query.data == "current_week":
+            week_info, keyboard = get_week_keyboard()
+            await query.edit_message_text(
+                f"📅 Текущая неделя:\n\n{week_info}",
+                reply_markup=keyboard
+            )
+            return
+    except ValueError as e:
+        logging.error(f"Ошибка обработки callback_data: {query.data}, ошибка: {e}")
+        await query.edit_message_text("Произошла ошибка. Попробуйте ещё раз.")
+        return
     
     tz = pytz.timezone(TIMEZONE)
     try:
@@ -93,10 +115,7 @@ async def show_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = f"На {date.strftime('%d.%m.%Y')} событий нет."
     
     # Создаем клавиатуру
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Добавить событие", callback_data=f"add_{date_str}")],
-        [InlineKeyboardButton("Назад к неделе", callback_data="back_to_week")]
-    ])
+    keyboard = get_day_keyboard(date_str)
     
     await query.edit_message_text(text, reply_markup=keyboard)
 
@@ -110,6 +129,12 @@ async def back_to_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📅 Текущая неделя:\n\n{week_info}",
         reply_markup=keyboard
     )
+
+async def add_event_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("Введите название события:")
+    return SETTING_TITLE
 
 async def add_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало добавления события"""
@@ -127,6 +152,11 @@ async def save_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Введите время события (формат ЧЧ:ММ):")
     return SETTING_TIME
 
+async def set_event_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['event_title'] = update.message.text
+    await update.message.reply_text("Введите время события в формате ЧЧ:ММ (например, 14:30):")
+    return SETTING_TIME
+
 async def set_event_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Установка времени события"""
     try:
@@ -142,30 +172,33 @@ async def set_event_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return SETTING_TIME
 
 async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сохранение всего события"""
     query = update.callback_query
     await query.answer()
     
     _, minutes = query.data.split('_')
-    tz = pytz.timezone(TIMEZONE)
+    context.user_data['reminder_minutes'] = int(minutes)
     
+    # Получаем сохраненные данные
+    date_str = context.user_data['event_date']
+    title = context.user_data['event_title']
+    time_obj = context.user_data['event_time']
+    
+    # Сохраняем событие в БД
     user = User.get(user_id=update.effective_user.id)
     event = Event.create(
         user=user,
-        name=context.user_data['event_name'],
-        date=datetime.strptime(context.user_data['event_date'], "%Y-%m-%d").date(),
-        time=context.user_data['event_time'],
+        name=title,
+        date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+        time=time_obj,
         reminder_minutes=int(minutes)
     )
     
+    # Планируем напоминание
     setup_scheduler(context.job_queue, event, user.user_id)
     
-    date = tz.localize(datetime.combine(event.date, datetime.min.time()))
-    week_info, keyboard = get_week_keyboard(date)
-    
     await query.edit_message_text(
-        f"✅ Событие добавлено!\n\n{week_info}",
-        reply_markup=keyboard
+        f"✅ Событие '{title}' успешно добавлено!",
+        reply_markup=get_week_keyboard()[1]  # Возвращаем клавиатуру недели
     )
     return ConversationHandler.END
 
@@ -187,14 +220,16 @@ def main():
         .build()
     
     conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(add_event, pattern='^add_')],
+        entry_points=[
+            CallbackQueryHandler(add_event_start, pattern='^add_')
+        ],
         states={
-            ADDING_EVENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_event)],
+            SETTING_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_event_title)],
             SETTING_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_event_time)],
             SETTING_REMINDER: [CallbackQueryHandler(set_reminder, pattern='^reminder_')]
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=True
+        per_message=False
     )
     
     handlers = [

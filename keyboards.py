@@ -42,6 +42,14 @@ def get_week_keyboard(current_date=None):
         InlineKeyboardMarkup(keyboard)
     )
 
+def get_day_keyboard(date_str):
+    """Клавиатура для просмотра событий дня с кнопкой 'Назад к неделе'"""
+    keyboard = [
+        [InlineKeyboardButton("Добавить событие", callback_data=f"add_{date_str}")],
+        [InlineKeyboardButton("Назад к неделе", callback_data="back_to_week")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 def get_reminder_keyboard():
     """Клавиатура выбора времени напоминания"""
     buttons = [
