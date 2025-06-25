@@ -232,11 +232,19 @@ def delete_event(update: Update, context):
     query.edit_message_text("Событие удалено!")
 
 def main():
+    # Инициализация базы данных
     initialize_db()
-    
-    # Создаем Application и передаем токен
-    application = Application.builder().token(BOT_TOKEN).build()
-    
+
+    # Создаем Application с настройками таймаутов
+    application = Application.builder() \
+        .token("YOUR_BOT_TOKEN") \
+        .read_timeout(30) \
+        .write_timeout(30) \
+        .connect_timeout(30) \
+        .pool_timeout(30) \
+        .build()
+
+    # Настройка ConversationHandler
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(add_event, pattern='^add_')],
         states={
@@ -244,18 +252,33 @@ def main():
             SETTING_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_time)],
             SETTING_REMINDER: [CallbackQueryHandler(set_reminder, pattern='^reminder_')]
         },
-        fallbacks=[]
+        fallbacks=[],
+        per_message=True  # Добавляем для корректной работы
     )
-    
-    # Добавляем все обработчики в application
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(week_handler, pattern='^week_'))
-    application.add_handler(CallbackQueryHandler(day_handler, pattern='^day_'))
-    application.add_handler(CallbackQueryHandler(back_to_week, pattern='^back_to_week$'))
-    application.add_handler(conv_handler)
-    
-    # Запускаем бота
-    application.run_polling()
+
+    # Добавляем обработчики
+    handlers = [
+        CommandHandler("start", start),
+        CallbackQueryHandler(week_handler, pattern='^week_'),
+        CallbackQueryHandler(day_handler, pattern='^day_'),
+        CallbackQueryHandler(back_to_week, pattern='^back_to_week$'),
+        conv_handler
+    ]
+
+    for handler in handlers:
+        application.add_handler(handler)
+
+    # Запускаем бота с обработкой ошибок
+    try:
+        application.run_polling(
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES,
+            timeout=30
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при работе бота: {e}")
+    finally:
+        logger.info("Бот остановлен")
 
 if __name__ == '__main__':
     main()
