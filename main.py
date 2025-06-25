@@ -236,7 +236,7 @@ def main():
     
     dp.add_handler(CallbackQueryHandler(back_to_week, pattern='^back_to_week$'))
 
-    application = Application.builder().token("YOUR_BOT_TOKEN").build()
+    application = Application.builder().token("8191721160:AAEkjZdvLwr2JAFB1pmbeHk8hI7Tu2fJs3M").build()
 
     dp.add_handler(CallbackQueryHandler(delete_event, pattern='^delete_'))
 
