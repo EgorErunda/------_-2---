@@ -235,7 +235,7 @@ def main():
     initialize_db()
     
     # Создаем Application и передаем токен
-    application = Application.builder().token("YOUR_BOT_TOKEN").build()
+    application = Application.builder().token(BOT_TOKEN).build()
     
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(add_event, pattern='^add_')],
