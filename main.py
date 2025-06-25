@@ -15,6 +15,7 @@ from scheduler import setup_scheduler
 from datetime import datetime
 from config import TIMEZONE
 import pytz
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Настройка логирования
 logging.basicConfig(
@@ -72,35 +73,40 @@ async def show_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     _, date_str = query.data.split('_')
-    tz = pytz.timezone(TIMEZONE)
     date = datetime.strptime(date_str, "%Y-%m-%d").date()
     
+    # Получаем события из базы данных
     user = User.get(user_id=query.from_user.id)
     events = Event.select().where(
         (Event.user == user) & 
         (Event.date == date)
     ).order_by(Event.time)
     
-    week_num = date.isocalendar()[1]
-    total_weeks = datetime(date.year, 12, 28).isocalendar()[1]
-    week_info = f"Неделя {week_num} из {total_weeks}\n"
-    
+    # Формируем текст сообщения
     if events:
-        text = f"{week_info}События на {date.strftime('%d.%m.%Y')}:\n\n" + \
+        text = f"События на {date.strftime('%d.%m.%Y')}:\n\n" + \
                "\n".join(f"⏰ {e.time.strftime('%H:%M')} - {e.name}" for e in events)
     else:
-        text = f"{week_info}На {date.strftime('%d.%m.%Y')} событий нет."
+        text = f"На {date.strftime('%d.%m.%Y')} событий нет."
     
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton("Добавить событие", callback_data=f"add_{date_str}"),
-        InlineKeyboardButton("Назад к неделе", callback_data="back_to_week")
-    ]])
+    # Создаем клавиатуру
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Добавить событие", callback_data=f"add_{date_str}")],
+        [InlineKeyboardButton("Назад к неделе", callback_data="back_to_week")]
+    ])
     
     await query.edit_message_text(text, reply_markup=keyboard)
 
 async def back_to_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Возврат к просмотру недели"""
-    await show_week(update, context)
+    query = update.callback_query
+    await query.answer()
+    
+    week_info, keyboard = get_week_keyboard()
+    await query.edit_message_text(
+        f"📅 Текущая неделя:\n\n{week_info}",
+        reply_markup=keyboard
+    )
 
 async def add_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало добавления события"""
@@ -169,6 +175,9 @@ def main():
     """Запуск бота"""
     initialize_db()
     
+    application.add_handler(CallbackQueryHandler(add_event, pattern='^add_'))
+    application.add_handler(CallbackQueryHandler(back_to_week, pattern='^back_to_week$'))
+
     application = Application.builder() \
         .token(BOT_TOKEN) \
         .concurrent_updates(True) \
