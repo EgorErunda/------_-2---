@@ -1,1 +1,2 @@
 BOT_TOKEN = "8191721160:AAEkjZdvLwr2JAFB1pmbeHk8hI7Tu2fJs3M"
+TIMEZONE = "Europe/Moscow"
