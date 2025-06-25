@@ -51,9 +51,11 @@ def get_day_keyboard(date_str):
     return InlineKeyboardMarkup(keyboard)
 
 def get_reminder_keyboard():
-    """Клавиатура выбора времени напоминания"""
-    buttons = [
-        [InlineKeyboardButton(f"За {mins} минут", callback_data=f"reminder_{mins}")]
-        for mins in [5, 15, 30, 60, 120, 1440]
-    ]
-    return InlineKeyboardMarkup(buttons)
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("За 5 мин", callback_data="reminder_5")],
+        [InlineKeyboardButton("За 15 мин", callback_data="reminder_15")],
+        [InlineKeyboardButton("За 30 мин", callback_data="reminder_30")],
+        [InlineKeyboardButton("За 1 час", callback_data="reminder_60")],
+        [InlineKeyboardButton("За 2 часа", callback_data="reminder_120")],
+        [InlineKeyboardButton("Назад", callback_data="back_to_time")]
+    ])
