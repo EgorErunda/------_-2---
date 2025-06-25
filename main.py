@@ -9,6 +9,7 @@ from database import initialize_db, User, Event
 from scheduler import setup_scheduler
 from datetime import datetime, timedelta
 import calendar
+from config import BOT_TOKEN
 
 # Настройка логирования
 logging.basicConfig(
@@ -236,7 +237,7 @@ def main():
     
     dp.add_handler(CallbackQueryHandler(back_to_week, pattern='^back_to_week$'))
 
-    application = Application.builder().token("8191721160:AAEkjZdvLwr2JAFB1pmbeHk8hI7Tu2fJs3M").build()
+    application = Application.builder().token(BOT_TOKEN).build()
 
     dp.add_handler(CallbackQueryHandler(delete_event, pattern='^delete_'))
 
