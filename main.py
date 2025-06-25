@@ -39,14 +39,19 @@ logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка команды /start"""
-    user_id = update.effective_user.id
-    User.get_or_create(user_id=user_id)
-    
-    week_info, keyboard = get_week_keyboard()
-    await update.message.reply_text(
-        f"📅 Добро пожаловать в планировщик!\n\n{week_info}",
-        reply_markup=keyboard
-    )
+    try:
+        user_id = update.effective_user.id
+        User.get_or_create(user_id=user_id)
+        
+        week_info, keyboard = get_week_keyboard()
+        await update.message.reply_text(
+            f"📅 Добро пожаловать в планировщик!\n\n{week_info}",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в start(): {str(e)}")
+        await update.message.reply_text("⚠️ Произошла ошибка при запуске. Попробуйте позже.")
+
 
 async def show_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать неделю"""
@@ -134,25 +139,12 @@ async def add_event_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    # Получаем дату из callback_data (формат: add_YYYY-MM-DD)
     _, date_str = query.data.split('_', 1)
-    
-    # Инициализируем данные события
-    context.user_data['event_data'] = {
-        'date': date_str
-    }
+    context.user_data['event_data'] = {'date': date_str}
     
     await query.edit_message_text("Введите название события:")
     return SETTING_TITLE
-async def add_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало добавления события"""
-    query = update.callback_query
-    await query.answer()
-    
-    _, date_str = query.data.split('_')
-    context.user_data['event_date'] = date_str
-    await query.edit_message_text("Введите название события:")
-    return ADDING_EVENT
+
 
 async def save_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сохранение названия события"""
@@ -161,142 +153,89 @@ async def save_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SETTING_TIME
 
 async def set_event_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Инициализируем словарь, если его нет
-    if 'event_data' not in context.user_data:
-        context.user_data['event_data'] = {}
-    
     context.user_data['event_data']['title'] = update.message.text
-    await update.message.reply_text("Введите время события (формат ЧЧ:ММ):")
+    await update.message.reply_text("Введите время события в формате ЧЧ:ММ (например, 14:30):")
     return SETTING_TIME
 
 async def set_event_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        time_obj = datetime.strptime(update.message.text, "%H:%M").time()
+        time_str = update.message.text.strip()
+        time_obj = datetime.strptime(time_str, "%H:%M").time()
+        
+        # Сохраняем время с учетом временной зоны
+        tz = pytz.timezone(TIMEZONE)
+        event_date = datetime.strptime(context.user_data['event_data']['date'], "%Y-%m-%d").date()
+        event_datetime = tz.localize(datetime.combine(event_date, time_obj))
+        
+        # Проверяем, что время еще не прошло
+        if event_datetime < datetime.now(tz):
+            await update.message.reply_text("Это время уже прошло. Введите будущее время:")
+            return SETTING_TIME
+            
         context.user_data['event_data']['time'] = time_obj
         await update.message.reply_text(
             "Выберите время напоминания:",
             reply_markup=get_reminder_keyboard()
         )
         return SETTING_REMINDER
+        
     except ValueError:
         await update.message.reply_text("Неверный формат времени. Введите в формате ЧЧ:ММ:")
         return SETTING_TIME
 
 async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    await query.answer()
+    
     try:
-        await query.answer()
-        
-        # Проверяем наличие необходимых данных
-        if 'event_data' not in context.user_data:
-            raise ValueError("Данные события не найдены")
-        
-        # Получаем минуты напоминания
-        if not query.data.startswith('reminder_'):
-            raise ValueError("Неверный формат callback_data")
-            
         _, minutes_str = query.data.split('_')
-        try:
-            minutes = int(minutes_str)
-        except ValueError:
-            raise ValueError("Неверное значение минут напоминания")
-        
-        # Проверяем время события
+        minutes = int(minutes_str)
         event_data = context.user_data['event_data']
-        event_time = datetime.combine(
-            datetime.strptime(event_data['date'], "%Y-%m-%d").date(),
-            event_data['time']
-        )
         
-        # Проверяем, не прошло ли уже время события
-        if event_time < datetime.now():
-            raise ValueError("Время события уже прошло")
+        # Получаем временную зону
+        tz = pytz.timezone(TIMEZONE)
+        event_date = datetime.strptime(event_data['date'], "%Y-%m-%d").date()
+        event_time = event_data['time']
+        event_datetime = tz.localize(datetime.combine(event_date, event_time))
         
-        # Проверяем, чтобы напоминание было до события
-        reminder_time = event_time - timedelta(minutes=minutes)
-        if reminder_time < datetime.now():
-            raise ValueError("Время напоминания уже прошло")
-        
-        # Сохраняем событие в БД
-        try:
-            user = User.get(user_id=update.effective_user.id)
-            event = Event.create(
-                user=user,
-                name=event_data['title'],
-                date=datetime.strptime(event_data['date'], "%Y-%m-%d").date(),
-                time=event_data['time'],
-                reminder_minutes=minutes
-            )
-        except Exception as db_error:
-            raise ValueError(f"Ошибка сохранения в БД: {db_error}")
-        
-        # Планируем напоминание
-        try:
-            if not setup_scheduler(context.job_queue, event, user.user_id):
-                raise ValueError("Не удалось запланировать напоминание")
-        except Exception as scheduler_error:
-            raise ValueError(f"Ошибка планировщика: {scheduler_error}")
-        
-        # Формируем сообщение об успехе
-        success_text = (
-            f"✅ Событие успешно создано!\n\n"
-            f"📌 Название: {event_data['title']}\n"
-            f"⏰ Время: {event_data['time'].strftime('%H:%M')}\n"
-            f"🔔 Напоминание за: {minutes} минут"
-        )
-        
-        # Отправляем сообщение
-        try:
+        # Проверяем напоминание
+        reminder_time = event_datetime - timedelta(minutes=minutes)
+        if reminder_time < datetime.now(tz):
             await query.edit_message_text(
-                text=success_text,
-                reply_markup=get_week_keyboard()[1]
+                "Напоминание не может быть раньше текущего времени",
+                reply_markup=get_reminder_keyboard()
             )
-        except Exception as msg_error:
-            logging.error(f"Ошибка редактирования сообщения: {msg_error}")
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=success_text,
-                reply_markup=get_week_keyboard()[1]
-            )
+            return SETTING_REMINDER
         
-        # Очищаем временные данные
-        context.user_data.pop('event_data', None)
+        # Создаем событие
+        user = User.get(user_id=update.effective_user.id)
+        event = Event.create(
+            user=user,
+            name=event_data['title'],
+            date=event_date,
+            time=event_time,
+            reminder_minutes=minutes
+        )
+        
+        # Настраиваем напоминание
+        if not setup_scheduler(context.application.job_queue, event):
+            raise ValueError("Не удалось запланировать напоминание")
+        
+        # Успешное завершение
+        await query.edit_message_text(
+            text=f"✅ Событие создано!\n{event_data['title']} в {event_time.strftime('%H:%M')}",
+            reply_markup=get_week_keyboard()[1]
+        )
+        context.user_data.clear()
         return ConversationHandler.END
-        
-    except ValueError as ve:
-        error_text = f"⚠️ Ошибка: {str(ve)}"
-        logging.error(error_text)
-        
-        # Пытаемся отредактировать сообщение или отправить новое
-        try:
-            await query.edit_message_text(
-                text=error_text,
-                reply_markup=get_reminder_keyboard()
-            )
-        except Exception:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=error_text,
-                reply_markup=get_reminder_keyboard()
-            )
-        return SETTING_REMINDER
         
     except Exception as e:
-        error_text = "⚠️ Произошла непредвиденная ошибка. Пожалуйста, попробуйте позже."
-        logging.error(f"Необработанная ошибка: {str(e)}")
-        
-        try:
-            await query.edit_message_text(
-                text=error_text,
-                reply_markup=get_week_keyboard()[1]
-            )
-        except Exception:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=error_text,
-                reply_markup=get_week_keyboard()[1]
-            )
-        return ConversationHandler.END
+        logger.error(f"Ошибка создания события: {e}", exc_info=True)
+        await query.edit_message_text(
+            text=f"Ошибка: {str(e)}",
+            reply_markup=get_reminder_keyboard()
+        )
+        return SETTING_REMINDER
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отмена операции"""
